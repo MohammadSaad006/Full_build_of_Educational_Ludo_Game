@@ -1,17 +1,38 @@
 import React, { useState, useEffect, useCallback ,useRef} from 'react';
-import { SafeAreaView, FlatList, Text, View, TouchableOpacity, Alert, TextInput, Button ,StyleSheet,ScrollView, ActivityIndicator,Image,ImageBackground,Dimensions} from 'react-native';
+import { SafeAreaView, FlatList, Text, View, TouchableOpacity, Alert, TextInput, Button ,StyleSheet,ScrollView, ActivityIndicator,Image,ImageBackground,Dimensions,Easing ,Modal} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { firestore } from './firebaseConfig'; // Import Firestore from firebaseConfig
-import { addDoc, collection, getDocs ,doc, setDoc, getDoc, updateDoc, arrayUnion ,onSnapshot} from 'firebase/firestore'; // Import Firestore functions
+import { firebaseConfig,firestore ,auth,RecaptchaVerifier } from './firebaseConfig'; // Import Firestore from firebaseConfig
+import { addDoc, collection, getDocs ,doc, setDoc, getDoc, updateDoc, arrayUnion ,onSnapshot,orderBy,query,where,serverTimestamp} from 'firebase/firestore'; // Import Firestore functions
 import TimerDisplay from './TimerDisplay'; // Import the TimerDisplay component
 import { LinearGradient } from 'expo-linear-gradient';
 import { Animated } from 'react-native';
 import { Audio } from 'expo-av';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { BlurView } from 'expo-blur';
+import { useFocusEffect } from '@react-navigation/native';
+import { Picker } from '@react-native-picker/picker';
+import parsePhoneNumberFromString from 'libphonenumber-js';
+import {getAuth, createUserWithEmailAndPassword, sendEmailVerification, signInWithEmailAndPassword, signOut ,signInWithPhoneNumber} from 'firebase/auth';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+
+const CustomFirebaseRecaptchaVerifierModal = ({
+  firebaseConfig,
+  attemptInvisibleVerification = false,
+  ...props
+}) => {
+  return (
+    <FirebaseRecaptchaVerifierModal
+      firebaseConfig={firebaseConfig}
+      attemptInvisibleVerification={attemptInvisibleVerification}
+      {...props}
+    />
+  );
+};
+
+import Svg, { Path } from 'react-native-svg';
 const Stack = createStackNavigator();
-
-
 
 const isSafeSpot = (row, col) => {
   // Safe spots coordinates
@@ -35,45 +56,46 @@ const isSafeSpot = (row, col) => {
 // Add this after isSafeSpot function and before the components
 const getCellColor = (row, col) => {
   // Home Areas
-  if (row <= 5 && col <= 5) return '#b01313';     // Red home (top-left)
-  if (row <= 5 && col >= 9) return '#1ca61e';     // Green home (top-right)
-  if (row >= 9 && col >= 9) return '#ded70b';     // Yellow home (bottom-right)
-  if (row >= 9 && col <= 5) return '#3478F6';     // Blue home (bottom-left)
+  // if (row <= 5 && col <= 5) return '#b43433';  // Red home (top-left)
+  // if (row <= 5 && col >= 9) return '#31ad64';  // Green home (top-right)
+  // if (row >= 9 && col >= 9) return '#e0c550';  // Yellow home (bottom-right)
+  // if (row >= 9 && col <= 5) return '#4258c8';  // Blue home (bottom-left)
 
   // Safe spots (including starting positions)
   if (isSafeSpot(row, col)) {
-      return '#222831';  // Gold color for safe spots
+      return '#222831';  // Safe spot color
   }
 
   // Home Paths
   // Red path
-  if (row === 7 && col >= 1 && col <= 5) return '#b01313';  // Horizontal
-  if (row === 6 && col === 1) return '#b01313';             // Vertical
+  if (row === 7 && col >= 1 && col <= 5) return 'transparent'; 
+  if (row === 1 && col === 1) return 'white';
+  if (row === 6 && col === 1) return 'transparent';             
 
   // Green path
-  if (col === 7 && row >= 1 && row <= 5) return '#1ca61e';  // Vertical
-  if (row === 1 && col === 8) return '#1ca61e';             // Horizontal
+  if (col === 7 && row >= 1 && row <= 5) return 'transparent';  
+  if (row === 1 && col === 8) return 'transparent';             
 
   // Yellow path
-  if (row === 7 && col >= 9 && col <= 13) return '#ded70b';  // Horizontal
-  if (row === 8 && col === 13) return '#ded70b';             // Vertical
+  if (row === 7 && col >= 9 && col <= 13) return 'transparent';  
+  if (row === 8 && col === 13) return 'transparent';             
 
   // Blue path
-  if (col === 7 && row >= 9 && row <= 13) return '#3478F6';  // Vertical
-  if (row === 13 && col === 6) return '#3478F6';             // Horizontal
+  if (col === 7 && row >= 9 && row <= 13) return 'transparent';  
+  if (row === 13 && col === 6) return 'transparent';             
 
   // Center cell
-  if (row === 7 && col === 7) return '#6A0DAD';
-  if (row === 6 && col === 7) return '#6A0DAD';
-  if (row === 6 && col === 6) return '#6A0DAD';
-  if (row === 6 && col === 8) return '#6A0DAD';
-  if (row === 7 && col === 6) return '#6A0DAD';
-  if (row === 7 && col === 8) return '#6A0DAD';
-  if (row === 8 && col === 6) return '#6A0DAD';
-  if (row === 8 && col === 7) return '#6A0DAD';  // Center of board
-  if (row === 8 && col === 8) return '#6A0DAD'; 
-  return null;  // Default cell color
+  if (
+    (row === 7 && col === 7) || (row === 6 && col === 7) || 
+    (row === 6 && col === 6) || (row === 6 && col === 8) || 
+    (row === 7 && col === 6) || (row === 7 && col === 8) || 
+    (row === 8 && col === 6) || (row === 8 && col === 7) || 
+    (row === 8 && col === 8)
+  ) return 'transparent';  // Center color
+
+  return 'transparent';  // Default cell color (white)
 };
+
 
 
 const tokenImages = {
@@ -118,18 +140,26 @@ function Cell({ position, tokens, onPress }) {
   const isSafe = isSafeSpot(row, col);
   const cellColor = getCellColor(row, col);
 
+  const getHomeStyle = () => {
+      if (row <= 5 && col <= 5) return styles.redHome;   // Red home
+      if (row <= 5 && col >= 9) return styles.greenHome; // Green home
+      if (row >= 9 && col >= 9) return styles.yellowHome; // Yellow home
+      if (row >= 9 && col <= 5) return styles.blueHome;  // Blue home
+    
+
+      if ((row === 2 && col === 1) || (row === 6 && col === 7) || (row === 6 && col === 6) || 
+      (row === 6 && col === 8) || (row === 7 && col === 6) || (row === 7 && col === 8) || 
+      (row === 8 && col === 6) || (row === 8 && col === 7) || (row === 8 && col === 8)) {
+      return styles.centerCell;
+  }
+
+  return styles.defaultCell; // Default cell style
+
+  };
+
   const arrangeTokens = () => {
       if (tokens.length > 1) {
-          // Calculate token size based on number of tokens
-          let tokenSize;
-          if (tokens.length === 2) {
-              tokenSize = 8; // Reduced from 12 to 8
-          } else if (tokens.length === 3) {
-              tokenSize = 6; // Reduced from 10 to 6
-          } else {
-              tokenSize = 5; // Reduced from 8 to 5
-          }
-
+          let tokenSize = tokens.length === 2 ? 8 : tokens.length === 3 ? 6 : 5;
           return (
               <View style={styles.multipleTokenContainer}>
                   {tokens.map((token, index) => (
@@ -143,14 +173,12 @@ function Cell({ position, tokens, onPress }) {
               </View>
           );
       }
-      
-      // Single token
       return tokens.map((token, index) => (
           <Token 
               key={index} 
               color={token.color} 
               position={position}
-              size={30} // Reduced from 15 to 12 for single token
+              size={30} 
           />
       ));
   };
@@ -161,6 +189,7 @@ function Cell({ position, tokens, onPress }) {
               styles.cell,
               cellColor && { backgroundColor: cellColor },
               isSafe && styles.safeSpot,
+              getHomeStyle()
           ]}
           onPress={() => onPress(position)}
       >
@@ -168,6 +197,7 @@ function Cell({ position, tokens, onPress }) {
       </TouchableOpacity>
   );
 }
+
 
 // Board Component
 function Board({ currentPlayer, diceValue, tokens, onMoveToken, possibleMoves, onTokenSelect }) {
@@ -218,154 +248,275 @@ function Board({ currentPlayer, diceValue, tokens, onMoveToken, possibleMoves, o
   return <View style={styles.board}>{renderBoard()}</View>;
 }
 
-
-
-const  CountryStateScreen = ({ navigation }) => {
-    const [countries, setCountries] = useState([]);
-    const [newCountry, setNewCountry] = useState('');
-    const [states, setStates] = useState([]);
-    const [newState, setNewState] = useState('');
-    const [selectedCountry, setSelectedCountry] = useState(null);
-    const [selectedStandard, setSelectedStandard] = useState(null);
-    const [standards, setStandards] = useState([]);
-    const [newStandard, setNewStandard] = useState('');
-  
-    useEffect(() => {
-      const fetchCountries = async () => {
-        try {
-          const querySnapshot = await getDocs(collection(firestore, 'countries'));
-          const countriesList = querySnapshot.docs.map(doc => doc.data());
-          setCountries(countriesList);
-        } catch (error) {
-          console.error("Error fetching countries: ", error);
-        }
-      };
-      fetchCountries();
-    }, []);
-  
-    const handleAddCountry = async () => {
-      if (!newCountry) {
-        Alert.alert('Error', 'Please enter a country name.');
-        return;
-      }
-      try {
-        await addDoc(collection(firestore, 'countries'), { name: newCountry });
-        setNewCountry('');
-        Alert.alert('Success', 'Country added successfully!');
-      } catch (error) {
-        console.error("Error adding country: ", error);
-        Alert.alert('Error', 'There was an issue adding the country.');
-      }
-    };
-    const handleCountrySelect = async (country) => {
-        setSelectedCountry(country);
-        try {
-          const querySnapshot = await getDocs(collection(firestore, 'countries', country.name, 'states'));
-          const statesList = querySnapshot.docs.map(doc => doc.data());
-          setStates(statesList);
-        } catch (error) {
-          console.error("Error fetching states: ", error);
-        }
-      };
-    
-    const handleAddState = async () => {
-      if (!newState || !selectedCountry) {
-        Alert.alert('Error', 'Please enter a state name.');
-        return;
-      }
-      try {
-        await addDoc(collection(firestore, 'countries', selectedCountry.name, 'states'), { name: newState });
-        setNewState('');
-        Alert.alert('Success', 'State added successfully!');
-      } catch (error) {
-        console.error("Error adding state: ", error);
-        Alert.alert('Error', 'There was an issue adding the state.');
-      }
-    };
-
-    const handleStateSelect = async (state) => {
-      setSelectedStandard(state);
-      try {
-        const querySnapshot = await getDocs(collection(firestore, 'countries', selectedCountry.name, 'states', state.name, 'standards'));
-        const standardsList = querySnapshot.docs.map(doc => doc.data());
-        setStandards(standardsList);
-      } catch (error) {
-        console.error("Error fetching standards: ", error);
-      }
-    };
-    const handleAddStandard = async () => {
-      if (!newStandard || !selectedStandard) {
-        Alert.alert('Error', 'Please enter a standard name.');
-        return;
-      }
-      try {
-        await addDoc(collection(firestore, 'countries', selectedCountry.name, 'states', selectedStandard.name, 'standards'), { name: newStandard });
-        setNewStandard('');
-        Alert.alert('Success', 'Standard added successfully!');
-      } catch (error) {
-        console.error("Error adding standard: ", error);
-        Alert.alert('Error', 'There was an issue adding the standard.');
-      }
-    };
-  
-    return (
-      <SafeAreaView>
-        <Text>Select a Country</Text>
-        {countries.map((country, index) => (
-          <Button key={index} title={country.name} onPress={() => handleCountrySelect(country)} />
-        ))}
-        <TextInput
-          value={newCountry}
-          placeholder="Add new country"
-          onChangeText={setNewCountry}
-        />
-        <Button title="Add Country" onPress={handleAddCountry} />
-  
-        {selectedCountry && (
-          <View>
-            <Text>Select a State in {selectedCountry.name}</Text>
-            {states.map((state, index) => (
-              <Button key={index} title={state.name} onPress={() => handleStateSelect(state)} />
-            ))}
-            <TextInput
-              value={newState}
-              placeholder="Add new state"
-              onChangeText={setNewState}
-            />
-            <Button title="Add State" onPress={handleAddState} />
-            
-            {selectedStandard && (
-              <View>
-                <Text>Select a Standard in {selectedStandard.name}</Text>
-                {standards.map((standard, index) => (
-                  <Button key={index} title={standard.name} onPress={() => navigation.navigate('Exam', { country: selectedCountry, state: selectedStandard, standard })} />
-                ))}
-                <TextInput
-                  value={newStandard}
-                  placeholder="Add new standard"
-                  onChangeText={setNewStandard}
-                />
-                <Button title="Add Standard" onPress={handleAddStandard} />
-              </View>
-            )}
-          </View>
-        )}
-      </SafeAreaView>
-    );
-  };
-
-
-
-// Country Screen
-const CountryScreen = ({ navigation }) => {
+const SignupScreen = ({ navigation }) => {
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [confirmResult, setConfirmResult] = useState(null);
+  const [verificationStep, setVerificationStep] = useState(false);
   const [countries, setCountries] = useState([]);
-  const [newCountry, setNewCountry] = useState('');
+  const [states, setStates] = useState([]);
+  const [standards, setStandards] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedState, setSelectedState] = useState(null);
+  const [selectedStandard, setSelectedStandard] = useState(null);
+  const recaptchaVerifier = useRef(null);
 
   useEffect(() => {
     const fetchCountries = async () => {
       try {
-        const querySnapshot = await getDocs(collection(firestore, 'countries'));
-        const countriesList = querySnapshot.docs.map(doc => doc.data());
+        const querySnapshot = await getDocs(query(collection(firestore, "countries"), orderBy("name")));
+        setCountries(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error("Error fetching countries: ", error);
+      }
+    };
+    fetchCountries();
+  }, []);
+
+  const handleCountrySelect = async (countryName) => {
+    const country = countries.find(c => c.name === countryName);
+    setSelectedCountry(country);
+    setStates([]);
+    setStandards([]);
+    setSelectedState(null);
+    setSelectedStandard(null);
+    try {
+      const statesRef = collection(firestore, "countries", country.name, "states");
+      const stateSnapshot = await getDocs(query(statesRef, orderBy("name")));
+      setStates(stateSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (error) {
+      console.error("Error fetching states: ", error);
+    }
+  };
+
+  const handleStateSelect = async (stateName) => {
+    const state = states.find(s => s.name === stateName);
+    setSelectedState(state);
+    setStandards([]);
+    setSelectedStandard(null);
+    try {
+      const standardsRef = collection(firestore, "countries", selectedCountry.name, "states", state.name, "standards");
+      const querySnapshot = await getDocs(query(standardsRef, orderBy("name")));
+      setStandards(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (error) {
+      console.error("Error fetching standards: ", error);
+    }
+  };
+
+  const handleSignup = async () => {
+    if (!phoneNumber || !password || !confirmPassword || !selectedCountry || !selectedState || !selectedStandard) {
+      Alert.alert("Error", "Please fill all fields correctly.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return;
+    }
+    try {
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier.current);
+      setConfirmResult(confirmation);
+      setVerificationStep(true);
+    } catch (error) {
+      console.error("OTP Sending Error:", error);
+      Alert.alert("Error", "Failed to send OTP. Please try again.");
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!verificationCode) {
+      Alert.alert("Error", "Please enter the verification code.");
+      return;
+    }
+    if (!confirmResult) {
+      Alert.alert("Error", "No verification session found. Please try signing up again.");
+      return;
+    }
+    try {
+      const userCredential = await confirmResult.confirm(verificationCode);
+      const user = userCredential.user;
+      
+      // Save user data in Firestore
+      await setDoc(doc(firestore, "users", user.uid), {
+        phoneNumber: user.phoneNumber,
+        country: selectedCountry.name,
+        state: selectedState.name,
+        standard: selectedStandard.name,
+        createdAt: serverTimestamp(),
+      });
+
+      Alert.alert("Success", "Account created successfully.");
+      navigation.navigate("Login");
+    } catch (error) {
+      console.error("OTP Verification Error:", error);
+      Alert.alert("Error", "Invalid verification code. Please try again.");
+    }
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, padding: 20 }}>
+      <FirebaseRecaptchaVerifierModal ref={recaptchaVerifier} firebaseConfig={auth.app.options} />
+      <ScrollView>
+        <Text style={{ fontSize: 28, fontWeight: "bold" }}>Signup</Text>
+
+        {!verificationStep ? (
+          <>
+            <TextInput placeholder="Phone Number" value={phoneNumber} onChangeText={setPhoneNumber} style={{ borderBottomWidth: 1 }} />
+            <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={{ borderBottomWidth: 1 }} />
+            <TextInput placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry style={{ borderBottomWidth: 1 }} />
+
+            <Picker selectedValue={selectedCountry?.name} onValueChange={handleCountrySelect}>
+              <Picker.Item label="Select Country" value={null} />
+              {countries.map(country => <Picker.Item key={country.id} label={country.name} value={country.name} />)}
+            </Picker>
+
+            {selectedCountry && (
+              <Picker selectedValue={selectedState?.name} onValueChange={handleStateSelect}>
+                <Picker.Item label="Select State" value={null} />
+                {states.map(state => <Picker.Item key={state.id} label={state.name} value={state.name} />)}
+              </Picker>
+            )}
+
+            {selectedState && (
+              <Picker selectedValue={selectedStandard?.name} onValueChange={(itemValue) => setSelectedStandard(standards.find(s => s.name === itemValue))}>
+                <Picker.Item label="Select Standard" value={null} />
+                {standards.map(standard => <Picker.Item key={standard.id} label={standard.name} value={standard.name} />)}
+              </Picker>
+            )}
+
+            <TouchableOpacity onPress={handleSignup} style={{ backgroundColor: "blue", padding: 15, marginTop: 20, alignItems: "center" }}>
+              <Text style={{ color: "white", fontSize: 18 }}>Sign Up</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => navigation.navigate("Login")} style={{ marginTop: 15, alignItems: "center" }}>
+              <Text style={{ color: "blue", fontSize: 16 }}>Already have an account? Login</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TextInput placeholder="Enter OTP" value={verificationCode} onChangeText={setVerificationCode} style={{ borderBottomWidth: 1, marginTop: 20 }} />
+            <TouchableOpacity onPress={handleVerifyOTP} style={{ backgroundColor: "green", padding: 15, marginTop: 20, alignItems: "center" }}>
+              <Text style={{ color: "white", fontSize: 18 }}>Verify OTP</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
+
+
+
+// Login Screen
+const LoginScreen = ({ navigation }) => {
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [confirmResult, setConfirmResult] = useState(null);
+  const [verificationStep, setVerificationStep] = useState(false);
+  const recaptchaVerifier = useRef(null);
+
+  const handleLogin = async () => {
+    if (!phoneNumber) {
+      Alert.alert("Error", "Please enter a valid phone number.");
+      return;
+    }
+    try {
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier.current);
+      setConfirmResult(confirmation);
+      setVerificationStep(true);
+    } catch (error) {
+      Alert.alert("Error", "Failed to send OTP. Please try again.");
+    }
+  };
+
+const handleVerifyOTP = async () => {
+  if (!verificationCode) {
+    Alert.alert("Error", "Please enter the verification code.");
+    return;
+  }
+  try {
+    const userCredential = await confirmResult.confirm(verificationCode);
+    const user = userCredential.user;
+
+    // Fetch user profile from Firestore
+    const profileRef = collection(firestore, "users");
+    const q = query(profileRef, where("uid", "==", user.uid));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      Alert.alert("Profile Not Found", "User profile was not found. Please sign up.");
+      return;
+    }
+
+    const profileData = querySnapshot.docs[0].data();
+
+    // Navigate to ExamScreen with profile data
+    navigation.navigate("Exam", {
+      country: { name: profileData.country },
+      state: { name: profileData.state },
+      standard: { name: profileData.standard },
+    });
+  } catch (error) {
+    Alert.alert("Error", "Invalid verification code.");
+  }
+};
+
+
+  return (
+    <SafeAreaView style={{ flex: 1, padding: 20 }}>
+      <FirebaseRecaptchaVerifierModal ref={recaptchaVerifier} firebaseConfig={auth.app.options} />
+      <ScrollView>
+        <Text style={{ fontSize: 28, fontWeight: "bold" }}>Login</Text>
+        {!verificationStep ? (
+          <>
+            <TextInput placeholder="Phone Number" value={phoneNumber} onChangeText={setPhoneNumber} style={{ borderBottomWidth: 1 }} />
+            <TouchableOpacity onPress={handleLogin} style={{ backgroundColor: "blue", padding: 15, marginTop: 20, alignItems: "center" }}>
+              <Text style={{ color: "white", fontSize: 18 }}>Send OTP</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TextInput placeholder="Enter OTP" value={verificationCode} onChangeText={setVerificationCode} style={{ borderBottomWidth: 1, marginTop: 20 }} />
+            <TouchableOpacity onPress={handleVerifyOTP} style={{ backgroundColor: "green", padding: 15, marginTop: 20, alignItems: "center" }}>
+              <Text style={{ color: "white", fontSize: 18 }}>Verify OTP</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {/* Switch to Signup */}
+        <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+          <Text style={{ color: "#007BFF", fontSize: 16, marginTop: 20 }}>
+            Don't have an account? Signup
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
+
+
+const CountryStateScreen = ({ navigation }) => {
+  const [countries, setCountries] = useState([]);
+  const [newCountry, setNewCountry] = useState('');
+  const [states, setStates] = useState([]);
+  const [newState, setNewState] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedState, setSelectedState] = useState(null);
+  const [standards, setStandards] = useState([]);
+  const [newStandard, setNewStandard] = useState('');
+
+  // Fetch countries in alphabetical order, assign serial number based on index
+  useEffect(() => {
+    const fetchCountries = async () => {
+      try {
+        const countriesRef = collection(firestore, 'countries');
+        const q = query(countriesRef, orderBy('name', 'asc'));
+        const querySnapshot = await getDocs(q);
+        const countriesList = querySnapshot.docs.map((doc, index) => ({
+          id: doc.id,
+          countryNumber: index + 1,
+          ...doc.data(),
+        }));
         setCountries(countriesList);
       } catch (error) {
         console.error("Error fetching countries: ", error);
@@ -380,230 +531,984 @@ const CountryScreen = ({ navigation }) => {
       return;
     }
     try {
-      await addDoc(collection(firestore, 'countries'), { name: newCountry });
+      const countriesRef = collection(firestore, 'countries');
+      // Get current count (ordered by name)
+      const q = query(countriesRef, orderBy('name', 'asc'));
+      const snapshot = await getDocs(q);
+      const nextCountryNumber = snapshot.size + 1;
+      await addDoc(countriesRef, { 
+        name: newCountry, 
+        countryNumber: nextCountryNumber 
+      });
       setNewCountry('');
-      Alert.alert('Success', 'Country added successfully!');
+      Alert.alert('Success', `Country added successfully! (Country number: ${nextCountryNumber})`);
+      // Refresh countries list
+      const refreshedSnapshot = await getDocs(q);
+      const countriesList = refreshedSnapshot.docs.map((doc, index) => ({
+        id: doc.id,
+        countryNumber: index + 1,
+        ...doc.data(),
+      }));
+      setCountries(countriesList);
     } catch (error) {
       console.error("Error adding country: ", error);
       Alert.alert('Error', 'There was an issue adding the country.');
     }
   };
 
-  return (
-    <SafeAreaView>
-      <Text>Select a Country</Text>
-      {countries.map((country, index) => (
-        <Button key={index} title={country.name} onPress={() => navigation.navigate('State', { country })} />
-      ))}
-      <TextInput
-        value={newCountry}
-        placeholder="Add new country"
-        onChangeText={setNewCountry}
-      />
-      <Button title="Add Country" onPress={handleAddCountry} />
-    </SafeAreaView>
-  );
-};
-
-// State Screen
-const StateScreen = ({ route, navigation }) => {
-  const { country } = route.params;
-  const [states, setStates] = useState([]);
-  const [newState, setNewState] = useState('');
-
-  useEffect(() => {
-    const fetchStates = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(firestore, 'countries', country.name, 'states'));
-        const statesList = querySnapshot.docs.map(doc => doc.data());
-        setStates(statesList);
-      } catch (error) {
-        console.error("Error fetching states: ", error);
-      }
-    };
-    fetchStates();
-  }, [country]);
+  // Fetch states for selected country (ordered by name)
+  const handleCountrySelect = async (country) => {
+    setSelectedCountry(country);
+    setSelectedState(null);
+    setStandards([]);
+    try {
+      const statesRef = collection(firestore, 'countries', country.name, 'states');
+      const q = query(statesRef, orderBy('name', 'asc'));
+      const querySnapshot = await getDocs(q);
+      const statesList = querySnapshot.docs.map((doc, index) => ({
+        id: doc.id,
+        stateNumber: index + 1,
+        ...doc.data(),
+      }));
+      setStates(statesList);
+    } catch (error) {
+      console.error("Error fetching states: ", error);
+    }
+  };
 
   const handleAddState = async () => {
-    if (!newState) {
+    if (!newState || !selectedCountry) {
       Alert.alert('Error', 'Please enter a state name.');
       return;
     }
     try {
-      await addDoc(collection(firestore, 'countries', country.name, 'states'), { name: newState });
+      const statesRef = collection(firestore, 'countries', selectedCountry.name, 'states');
+      const q = query(statesRef, orderBy('name', 'asc'));
+      const snapshot = await getDocs(q);
+      const nextStateNumber = snapshot.size + 1;
+      await addDoc(statesRef, { 
+        name: newState, 
+        stateNumber: nextStateNumber 
+      });
       setNewState('');
-      Alert.alert('Success', 'State added successfully!');
+      Alert.alert('Success', `State added successfully! (State number: ${nextStateNumber})`);
+      // Refresh states list
+      const refreshedSnapshot = await getDocs(q);
+      const statesList = refreshedSnapshot.docs.map((doc, index) => ({
+        id: doc.id,
+        stateNumber: index + 1,
+        ...doc.data(),
+      }));
+      setStates(statesList);
     } catch (error) {
       console.error("Error adding state: ", error);
       Alert.alert('Error', 'There was an issue adding the state.');
     }
   };
 
-  return (
-    <SafeAreaView>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
-      <Text>Select a State in {country.name}</Text>
+  // Fetch standards for selected state (ordered by name)
+  const handleStateSelect = async (state) => {
+    setSelectedState(state);
+    try {
+      const standardsRef = collection(firestore, 'countries', selectedCountry.name, 'states', state.name, 'standards');
+      const q = query(standardsRef, orderBy('name', 'asc'));
+      const querySnapshot = await getDocs(q);
+      const standardsList = querySnapshot.docs.map((doc, index) => ({
+        id: doc.id,
+        standardNumber: index + 1,
+        ...doc.data(),
+      }));
+      setStandards(standardsList);
+    } catch (error) {
+      console.error("Error fetching standards: ", error);
+    }
+  };
 
-      {states.map((state, index) => (
-        <Button key={index} title={state.name} onPress={() => navigation.navigate('Exam', { country, state })} />
-      ))}
-      <TextInput
-        value={newState}
-        placeholder="Add new state"
-        onChangeText={setNewState}
-      />
-      <Button title="Add State" onPress={handleAddState} />
+  const handleAddStandard = async () => {
+    if (!newStandard || !selectedState) {
+      Alert.alert('Error', 'Please enter a standard name.');
+      return;
+    }
+    try {
+      const standardsRef = collection(firestore, 'countries', selectedCountry.name, 'states', selectedState.name, 'standards');
+      const q = query(standardsRef, orderBy('name', 'asc'));
+      const snapshot = await getDocs(q);
+      const nextStandardNumber = snapshot.size + 1;
+      await addDoc(standardsRef, { 
+        name: newStandard, 
+        standardNumber: nextStandardNumber 
+      });
+      setNewStandard('');
+      Alert.alert('Success', `Standard added successfully! (Standard number: ${nextStandardNumber})`);
+      // Refresh standards list
+      const refreshedSnapshot = await getDocs(q);
+      const standardsList = refreshedSnapshot.docs.map((doc, index) => ({
+        id: doc.id,
+        standardNumber: index + 1,
+        ...doc.data(),
+      }));
+      setStandards(standardsList);
+    } catch (error) {
+      console.error("Error adding standard: ", error);
+      Alert.alert('Error', 'There was an issue adding the standard.');
+    }
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f8ff' }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        {/* Countries Section */}
+        <Text style={{ fontSize: 28, fontWeight: '700', marginBottom: 16, color: '#003366', textAlign: 'center' }}>
+          Select a Country
+        </Text>
+        {countries.map((country) => (
+          <TouchableOpacity
+            key={country.id || country.name}
+            onPress={() => handleCountrySelect(country)}
+            style={{
+              backgroundColor: '#007BFF',
+              paddingVertical: 16,
+              paddingHorizontal: 24,
+              borderRadius: 16,
+              marginBottom: 16,
+              alignItems: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 6,
+              elevation: 5,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '600' }}>
+              {country.countryNumber}. {country.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 30 }}>
+          <TextInput
+            value={newCountry}
+            placeholder="Add new country"
+            onChangeText={setNewCountry}
+            placeholderTextColor="#777"
+            style={{
+              flex: 1,
+              backgroundColor: '#fff',
+              paddingVertical: 16,
+              paddingHorizontal: 20,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: '#ccc',
+              fontSize: 18,
+              marginRight: 16,
+            }}
+          />
+          <TouchableOpacity
+            onPress={handleAddCountry}
+            style={{
+              backgroundColor: '#28A745',
+              paddingVertical: 16,
+              paddingHorizontal: 24,
+              borderRadius: 16,
+              alignItems: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 6,
+              elevation: 5,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>
+              Add Country
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* States Section */}
+        {selectedCountry && (
+          <View style={{ marginTop: 20 }}>
+            <Text style={{ fontSize: 28, fontWeight: '700', marginBottom: 16, color: '#003366', textAlign: 'center' }}>
+              Select a State in {selectedCountry.name}
+            </Text>
+            {states.map((state) => (
+              <TouchableOpacity
+                key={state.id || state.name}
+                onPress={() => handleStateSelect(state)}
+                style={{
+                  backgroundColor: '#007BFF',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 16,
+                  marginBottom: 16,
+                  alignItems: 'center',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 6,
+                  elevation: 5,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 20, fontWeight: '600' }}>
+                  {state.stateNumber}. {state.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 30 }}>
+              <TextInput
+                value={newState}
+                placeholder="Add new state"
+                onChangeText={setNewState}
+                placeholderTextColor="#777"
+                style={{
+                  flex: 1,
+                  backgroundColor: '#fff',
+                  paddingVertical: 16,
+                  paddingHorizontal: 20,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#ccc',
+                  fontSize: 18,
+                  marginRight: 16,
+                }}
+              />
+              <TouchableOpacity
+                onPress={handleAddState}
+                style={{
+                  backgroundColor: '#28A745',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 6,
+                  elevation: 5,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>
+                  Add State
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Standards Section */}
+        {selectedCountry && selectedState && (
+          <View style={{ marginTop: 20 }}>
+            <Text style={{ fontSize: 28, fontWeight: '700', marginBottom: 16, color: '#003366', textAlign: 'center' }}>
+              Select a Standard in {selectedState.name}
+            </Text>
+            {standards.map((standard) => (
+              <TouchableOpacity
+                key={standard.id || standard.name}
+                onPress={() =>
+                  navigation.navigate('Exam', {
+                    country: selectedCountry,
+                    state: selectedState,
+                    standard,
+                  })
+                }
+                style={{
+                  backgroundColor: '#007BFF',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 16,
+                  marginBottom: 16,
+                  alignItems: 'center',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 6,
+                  elevation: 5,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 20, fontWeight: '600' }}>
+                  {standard.standardNumber ? `${standard.standardNumber}. ` : ''}{standard.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 30 }}>
+              <TextInput
+                value={newStandard}
+                placeholder="Add new standard"
+                onChangeText={setNewStandard}
+                placeholderTextColor="#777"
+                style={{
+                  flex: 1,
+                  backgroundColor: '#fff',
+                  paddingVertical: 16,
+                  paddingHorizontal: 20,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#ccc',
+                  fontSize: 18,
+                  marginRight: 16,
+                }}
+              />
+              <TouchableOpacity
+                onPress={handleAddStandard}
+                style={{
+                  backgroundColor: '#28A745',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 6,
+                  elevation: 5,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>
+                  Add Standard
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
+const aspectRatio = 16 / 9;
+const imageHeight = screenWidth / aspectRatio;
 
 // Exam Screen
+// const ExamScreen = ({ route, navigation }) => {
+//   const { country, state, standard } = route.params;
+//   const [exams, setExams] = useState([]);
+//   const [searchQuery, setSearchQuery] = useState('');
+//   const [filteredExams, setFilteredExams] = useState([]);
+
+//   useEffect(() => { 
+//     fetchExams();
+//   }, [country, state, standard]);
+
+//   const fetchExams = async () => {
+//     try {
+//       const examsRef = collection(
+//         firestore,
+//         'countries', country.name,
+//         'states', state.name,
+//         'standards', standard.name,
+//         'exams'
+//       );
+//       const q = query(examsRef, orderBy('examNumber', 'asc'));
+//       const querySnapshot = await getDocs(q);
+//       const examsList = querySnapshot.docs.map(doc => ({
+//         id: doc.id,
+//         examNumber: doc.data().examNumber,
+//         ...doc.data(),
+//       }));
+//       setExams(examsList);
+//       setFilteredExams(examsList);
+//     } catch (error) {
+//       console.error("Error fetching exams: ", error);
+//       Alert.alert("Error", "Failed to load exams.");
+//     }
+//   };
+
+//   // (Optional) Filter exams based on searchQuery if needed.
+//   useEffect(() => {
+//     if (searchQuery.trim() === '') {
+//       setFilteredExams(exams);
+//     } else {
+//       const lowerQuery = searchQuery.toLowerCase();
+//       setFilteredExams(
+//         exams.filter(item => item.name.toLowerCase().includes(lowerQuery))
+//       );
+//     }
+//   }, [searchQuery, exams]);
+
+//   const handleExamPress = (exam) => {
+//     navigation.navigate('Paper', { country, state, standard, exam });
+//   };
+
+//   return (
+//     <ImageBackground
+//       source={require('./ui/photos/Untitled.png')}
+//       style={{ width: screenWidth, height: screenHeight + 90 }}
+//       resizeMode="cover"
+//     >
+//       {/* Dark overlay for contrast */}
+//       <View style={{
+//         position: 'absolute',
+//         top: 0, left: 0, right: 0, bottom: 0,
+//       }} />
+//       <SafeAreaView style={{ flex: 1 }}>
+//         {/* Profile Icon */}
+//         <TouchableOpacity
+//           onPress={() => navigation.navigate("Profile")}
+//           style={{
+//             position: 'absolute',
+//             top: 10,
+//             right: 20,
+//             zIndex: 1,
+//             width: 40,
+//             height: 40,
+//             borderRadius: 20,
+//             backgroundColor: '#fff',
+//             justifyContent: 'center',
+//             alignItems: 'center',
+//           }}
+//         >
+//           <Image
+//             source={require('./assets/blue-circle-with-white-user_78370-4707.avif')}
+//             style={{ width: 30, height: 30, tintColor: '#007BFF' }}
+//             resizeMode="contain"
+//           />
+//         </TouchableOpacity>
+
+//         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+//           <Text style={{
+//             fontSize: 32,
+//             fontWeight: '700',
+//             textAlign: 'center',
+//             marginBottom: 30,
+//             color: '#fff',
+//           }}>
+//             📖 {state.name} Exams
+//           </Text>
+//           <Image 
+//             source={require('./ui/photos/z7-removebg-preview.png')}
+//             style={{ 
+//               width: screenWidth, 
+//               height: 120, 
+//               marginLeft: -20, 
+//               marginTop: 50, 
+//               marginBottom: 20 
+//             }}
+//             resizeMode="cover"
+//           />
+//           {filteredExams.map((exam) => (
+//             <TouchableOpacity
+//               key={exam.id}
+//               onPress={() => handleExamPress(exam)}
+//               activeOpacity={0.8}
+//               style={{ marginBottom: 15 }}
+//             >
+//               <ImageBackground
+//                 source={require('./ui/photos/z2-removebg-preview.png')}
+//                 style={{
+//                   padding: 50,
+//                   alignItems: 'center',
+//                   justifyContent: 'center',
+//                 }}
+//                 resizeMode="cover"
+//               >
+//                 <Text style={{
+//                   fontSize: 20,
+//                   fontWeight: '700',
+//                   color: '#fff',
+//                   textShadowColor: '#000',
+//                   textShadowOffset: { width: 1, height: 1 },
+//                   textShadowRadius: 3,
+//                   textAlign: 'center',
+//                 }}>
+//                   {exam.examNumber}. {exam.name} 
+//                 </Text>
+//               </ImageBackground>
+//             </TouchableOpacity>
+//           ))}
+//           <Image 
+//             source={require('./ui/photos/z8-removebg-preview.png')}
+//             style={{ 
+//               width: screenWidth, 
+//               height: 110, 
+//               marginLeft: -20, 
+//               marginTop: 50, 
+//               marginBottom: 20 
+//             }}
+//             resizeMode="cover"
+//           />
+//         </ScrollView>
+//       </SafeAreaView>
+//     </ImageBackground>
+//   );
+// };
+
+
+
 const ExamScreen = ({ route, navigation }) => {
   const { country, state, standard } = route.params;
   const [exams, setExams] = useState([]);
-  const [newExam, setNewExam] = useState('');
+  const [filteredExams, setFilteredExams] = useState([]);
 
-  useEffect(() => {
-    const fetchExams = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams'));
-        const examsList = querySnapshot.docs.map(doc => doc.data());
-        setExams(examsList);
-      } catch (error) {
-        console.error("Error fetching exams: ", error);
-      }
-    };
-    fetchExams();
-  }, [country, state, standard]);
-
-  const handleAddExam = async () => {
-    if (!newExam) {
-      Alert.alert('Error', 'Please enter an exam name.');
-      return;
-    }
+  // Fetch exams from Firebase
+  const fetchExams = async () => {
     try {
-      await addDoc(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams'), { name: newExam });
-      setNewExam('');
-      Alert.alert('Success', 'Exam added successfully!');
+      const examsRef = collection(
+        firestore,
+        'countries', country.name,
+        'states', state.name,
+        'standards', standard.name,
+        'exams'
+      );
+      const q = query(examsRef, orderBy('examNumber', 'asc'));
+      const querySnapshot = await getDocs(q);
+      const examsList = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        examNumber: doc.data().examNumber,
+        ...doc.data(),
+      }));
+      setExams(examsList);
+      setFilteredExams(examsList);
     } catch (error) {
-      console.error("Error adding exam: ", error);
-      Alert.alert('Error', 'There was an issue adding the exam.');
+      console.error("Error fetching exams: ", error);
+      Alert.alert("Error", "Failed to load exams.");
     }
   };
 
-  return (
-    <SafeAreaView>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
-      <Text>Select an Exam in {state.name}</Text>
+  // Refresh exams when navigating back from ProfileScreen
+  useFocusEffect(
+    React.useCallback(() => {
+      if (route.params?.refresh) {
+        fetchExams();
+      }
+    }, [route.params?.refresh])
+  );
 
-      {exams.map((exam, index) => (
-        <Button key={index} title={exam.name} onPress={() => navigation.navigate('Paper', { country, state, standard, exam })} />
-      ))}
-      <TextInput
-        value={newExam}
-        placeholder="Add new exam"
-        onChangeText={setNewExam}
-      />
-      <Button title="Add Exam" onPress={handleAddExam} />
+  useEffect(() => {
+    fetchExams();
+  }, [country, state, standard]);
+
+  const handleExamPress = (exam) => {
+    navigation.navigate('Paper', { country, state, standard, exam });
+  };
+
+  return (
+    <ImageBackground
+      source={require('./ui/photos/Untitled.png')}
+      style={{ flex: 1 }}
+      resizeMode="cover"
+    >
+      <SafeAreaView style={{ flex: 1 }}>
+        {/* Profile Icon */}
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Profile")}
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 20,
+            zIndex: 1,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: '#fff',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <Image
+            source={require('./ui/photos/z8-removebg-preview.png')}
+            style={{ width: 30, height: 30 }}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+
+        <ScrollView contentContainerStyle={{ padding: 20 }}>
+          <Text style={{
+            fontSize: 32,
+            fontWeight: '700',
+            textAlign: 'center',
+            marginBottom: 30,
+            color: '#fff',
+          }}>
+            📖 {state.name} Exams
+          </Text>
+
+          {filteredExams.map((exam) => (
+            <TouchableOpacity
+              key={exam.id}
+              onPress={() => handleExamPress(exam)}
+              style={{ marginBottom: 15 }}
+            >
+              <View style={{
+                padding: 20,
+                backgroundColor: '#007BFF',
+                borderRadius: 10,
+                alignItems: 'center'
+              }}>
+                <Text style={{ fontSize: 20, fontWeight: '700', color: '#fff' }}>
+                  {exam.examNumber}. {exam.name}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
+  );
+};
+
+
+
+const ProfileScreen = () => {
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [editing, setEditing] = useState(false); // Toggle edit mode
+
+  // Lists for selection
+  const [countries, setCountries] = useState([]);
+  const [states, setStates] = useState([]);
+  const [standards, setStandards] = useState([]);
+
+  // Editable selections
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedState, setSelectedState] = useState(null);
+  const [selectedStandard, setSelectedStandard] = useState(null);
+
+  const [updating, setUpdating] = useState(false);
+
+  // Fetch the user's profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const uid = auth.currentUser.uid;
+        const profileRef = collection(firestore, 'users');
+        const q = query(profileRef, where('uid', '==', uid));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const profData = querySnapshot.docs[0].data();
+          setProfile(profData);
+          // Set default selections
+          setSelectedCountry({ name: profData.country });
+          setSelectedState({ name: profData.state });
+          setSelectedStandard({ name: profData.standard });
+        } else {
+          Alert.alert("Profile not found", "Please sign up to create your profile.");
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  // Fetch list of countries
+  useEffect(() => {
+    const fetchCountries = async () => {
+      try {
+        const countriesRef = collection(firestore, 'countries');
+        const q = query(countriesRef, orderBy('name', 'asc'));
+        const querySnapshot = await getDocs(q);
+        setCountries(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error('Error fetching countries:', error);
+      }
+    };
+    fetchCountries();
+  }, []);
+
+  // Fetch states when country changes
+  useEffect(() => {
+    const fetchStates = async () => {
+      if (!selectedCountry) return;
+      try {
+        const statesRef = collection(firestore, 'countries', selectedCountry.name, 'states');
+        const q = query(statesRef, orderBy('name', 'asc'));
+        const querySnapshot = await getDocs(q);
+        setStates(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error('Error fetching states:', error);
+      }
+    };
+    fetchStates();
+  }, [selectedCountry]);
+
+  // Fetch standards when state changes
+  useEffect(() => {
+    const fetchStandards = async () => {
+      if (!selectedCountry || !selectedState) return;
+      try {
+        const standardsRef = collection(firestore, 'countries', selectedCountry.name, 'states', selectedState.name, 'standards');
+        const q = query(standardsRef, orderBy('name', 'asc'));
+        const querySnapshot = await getDocs(q);
+        setStandards(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error('Error fetching standards:', error);
+      }
+    };
+    fetchStandards();
+  }, [selectedState]);
+
+  // Update profile
+  const updateProfile = async () => {
+    setUpdating(true);
+    try {
+      const uid = auth.currentUser.uid;
+      const profileRef = collection(firestore, 'users');
+      const q = query(profileRef, where('uid', '==', uid));
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        Alert.alert("Error", "Profile not found.");
+        setUpdating(false);
+        return;
+      }
+      const docId = querySnapshot.docs[0].id;
+      await updateDoc(doc(firestore, 'users', docId), {
+        country: selectedCountry.name,
+        state: selectedState.name,
+        standard: selectedStandard.name,
+      });
+      Alert.alert("Success", "Profile updated.");
+      setEditing(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert("Error", "Failed to update profile.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loadingProfile) {
+    return <ActivityIndicator size="large" color="#007BFF" style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} />;
+  }
+
+  if (!profile) {
+    return <Text style={{ textAlign: 'center', marginTop: 50 }}>Profile not found. Please sign up.</Text>;
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f4f8' }}>
+      <ScrollView contentContainerStyle={{ padding: 20, alignItems: 'center' }}>
+        <Text style={{ fontSize: 28, fontWeight: 'bold', marginBottom: 20 }}>My Profile</Text>
+        <Text style={{ fontSize: 18, marginBottom: 10 }}>Email: {profile.email}</Text>
+
+        {!editing ? (
+          <>
+            <Text style={{ fontSize: 18 }}>Country: {profile.country}</Text>
+            <Text style={{ fontSize: 18 }}>State: {profile.state}</Text>
+            <Text style={{ fontSize: 18 }}>Standard: {profile.standard}</Text>
+
+            <TouchableOpacity onPress={() => setEditing(true)} style={{ marginTop: 20, backgroundColor: '#007BFF', padding: 15, borderRadius: 8 }}>
+              <Text style={{ color: '#fff', fontSize: 18 }}>Edit Profile</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', marginTop: 20 }}>Select Country</Text>
+            {countries.map(c => (
+              <TouchableOpacity key={c.id} onPress={() => setSelectedCountry({ name: c.name })} style={{ padding: 10, backgroundColor: selectedCountry.name === c.name ? '#007BFF' : '#fff', marginVertical: 5, width: '100%', borderRadius: 5 }}>
+                <Text style={{ fontSize: 18 }}>{c.name}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <Text style={{ fontSize: 20, fontWeight: 'bold', marginTop: 20 }}>Select State</Text>
+            {states.map(s => (
+              <TouchableOpacity key={s.id} onPress={() => setSelectedState({ name: s.name })} style={{ padding: 10, backgroundColor: selectedState.name === s.name ? '#007BFF' : '#fff', marginVertical: 5, width: '100%', borderRadius: 5 }}>
+                <Text style={{ fontSize: 18 }}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <Text style={{ fontSize: 20, fontWeight: 'bold', marginTop: 20 }}>Select Standard</Text>
+            {standards.map(std => (
+              <TouchableOpacity key={std.id} onPress={() => setSelectedStandard({ name: std.name })} style={{ padding: 10, backgroundColor: selectedStandard.name === std.name ? '#007BFF' : '#fff', marginVertical: 5, width: '100%', borderRadius: 5 }}>
+                <Text style={{ fontSize: 18 }}>{std.name}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity onPress={updateProfile} style={{ marginTop: 20, backgroundColor: '#28a745', padding: 15, borderRadius: 8 }}>
+              <Text style={{ color: '#fff', fontSize: 18 }}>{updating ? "Updating..." : "Save Changes"}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setEditing(false)} style={{ marginTop: 10 }}>
+              <Text style={{ fontSize: 16, color: 'red' }}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
-// Paper Screen
 const PaperScreen = ({ route, navigation }) => {
   const { country, state, standard, exam } = route.params;
   const [papers, setPapers] = useState([]);
-  const [newPaper, setNewPaper] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredPapers, setFilteredPapers] = useState([]);
 
+  // Realtime Firestore listener for papers.
   useEffect(() => {
-    const fetchPapers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams', exam.name, 'papers'));
-        const papersList = querySnapshot.docs.map(doc => doc.data());
-        setPapers(papersList);
-      } catch (error) {
-        console.error("Error fetching papers: ", error);
-      }
-    };
-    fetchPapers();
+    const papersRef = collection(
+      firestore,
+      'countries', country.name,
+      'states', state.name,
+      'standards', standard.name,
+      'exams', exam.name,
+      'papers'
+    );
+    const q = query(papersRef, orderBy('paperNumber', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const papersList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        paperNumber: doc.data().paperNumber,
+        ...doc.data(),
+      }));
+      setPapers(papersList);
+      setFilteredPapers(papersList);
+    }, (error) => {
+      console.error("Error fetching papers: ", error);
+      Alert.alert("Error", "Failed to load papers.");
+    });
+    return () => unsubscribe();
   }, [country, state, standard, exam]);
 
-  const handleAddPaper = async () => {
-    if (!newPaper) {
-      Alert.alert('Error', 'Please enter a paper name.');
-      return;
+  // Optionally filter papers based on a search query.
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredPapers(papers);
+    } else {
+      const lowerQuery = searchQuery.toLowerCase();
+      setFilteredPapers(
+        papers.filter(item => item.name.toLowerCase().includes(lowerQuery))
+      );
     }
-    try {
-      await addDoc(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams', exam.name, 'papers'), { name: newPaper });
-      setNewPaper('');
-      Alert.alert('Success', 'Paper added successfully!');
-    } catch (error) {
-      console.error("Error adding paper: ", error);
-      Alert.alert('Error', 'There was an issue adding the paper.');
-    }
+  }, [searchQuery, papers]);
+
+  const handlePaperPress = (paper) => {
+    navigation.navigate('Subject', { country, state, standard, exam, paper });
   };
 
   return (
-    <SafeAreaView>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      <Text>Select a Paper in {exam.name}</Text>
-      {papers.map((paper, index) => (
-        <Button key={index} title={paper.name} onPress={() => navigation.navigate('Subject', { country, state, standard, exam, paper })} />
-      ))}
-      <TextInput
-        value={newPaper}
-        placeholder="Add new paper"
-        onChangeText={setNewPaper}
-      />
-      <Button title="Add Paper" onPress={handleAddPaper} />
-    </SafeAreaView>
+    <ImageBackground
+      source={require('./ui/photos/t1-removebg-preview.png')} // Ludo-themed background image
+      style={{ flex: 1, width: screenWidth, height: screenHeight + 90, marginTop: -20 }}
+      resizeMode="cover"
+    >
+      {/* Dark overlay for contrast */}
+      <View style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+      }} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+          <GradientText
+            text={`${exam.name} - Papers`}
+            style={{
+              fontSize: 32,
+              fontWeight: '700',
+              textAlign: 'center',
+              marginBottom: 30,
+              color: '#fff'
+            }}
+          />
+          <Image 
+            source={require('./ui/photos/s6-removebg-preview.png')}
+            style={{ width: screenWidth, height: 110, marginLeft: -20, marginTop: 50, marginBottom: 20 }}
+            resizeMode="cover"
+          />
+          {/* Ludo-inspired paper buttons */}
+          {filteredPapers.map((paper) => (
+            <TouchableOpacity
+              key={paper.id}
+              onPress={() => handlePaperPress(paper)}
+              activeOpacity={0.8}
+              style={{ marginBottom: 15 }}
+            >
+              <ImageBackground
+                source={require('./ui/photos/t2-removebg-preview.png')} // Pattern image for paper buttons
+                style={{
+                  padding: 50,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height:180,
+                }}
+                resizeMode="cover"
+              >
+                <Text style={{
+                  fontSize: 20,
+                  fontWeight: '700',
+                  color: '#fff',
+                  textShadowColor: '#000',
+                  textShadowOffset: { width: 1, height: 1 },
+                  textShadowRadius: 3,
+                  textAlign: 'center',
+                }}>
+                   {paper.paperNumber}. {paper.name} 
+                </Text>
+              </ImageBackground>
+            </TouchableOpacity>
+          ))}
+          <Image 
+            source={require('./ui/photos/t3-removebg-preview.png')}
+            style={{ width: screenWidth, height: 190, marginLeft: -20, marginTop: 50, marginBottom: 20 }}
+            resizeMode="cover"
+          />
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 };
 
 // Subject Screen
+const GradientText = ({ text, style, gradientColors = ['#FF0000','#FF7F00','#FFFF00','#00FF00','#0000FF','#4B0082','#8B00FF'] }) => (
+  <MaskedView
+    style={{ flexDirection: 'row' }}
+    maskElement={
+      <Text style={[style, { backgroundColor: 'transparent' }]}>
+        {text}
+      </Text>
+    }
+  >
+    <LinearGradient
+      colors={gradientColors}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={{ flex: 1 }}
+    />
+  </MaskedView>
+);
+
 const SubjectScreen = ({ route, navigation }) => {
   const { country, state, standard, exam, paper } = route.params;
   const [subjects, setSubjects] = useState([]);
   const [newSubject, setNewSubject] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredSubjects, setFilteredSubjects] = useState([]);
 
+  // Realtime Firestore listener for subjects
   useEffect(() => {
-    const fetchSubjects = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams', exam.name, 'papers', paper.name, 'subjects'));
-        const subjectsList = querySnapshot.docs.map(doc => doc.data());
-        setSubjects(subjectsList);
-      } catch (error) {
-        console.error("Error fetching subjects: ", error);
-      }
-    };
-    fetchSubjects();
+    const subjectsRef = collection(
+      firestore,
+      'countries', country.name,
+      'states', state.name,
+      'standards', standard.name,
+      'exams', exam.name,
+      'papers', paper.name,
+      'subjects'
+    );
+    const q = query(subjectsRef, orderBy('subjectNumber', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const subjectsList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        subjectNumber: doc.data().subjectNumber,
+        ...doc.data(),
+      }));
+      setSubjects(subjectsList);
+      setFilteredSubjects(subjectsList);
+    }, (error) => {
+      console.error("Error fetching subjects: ", error);
+    });
+    return () => unsubscribe();
   }, [country, state, standard, exam, paper]);
+
+  // Filter subjects as search query changes.
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredSubjects(subjects);
+    } else {
+      const lowerQuery = searchQuery.toLowerCase();
+      setFilteredSubjects(
+        subjects.filter(item => item.name.toLowerCase().includes(lowerQuery))
+      );
+    }
+  }, [searchQuery, subjects]);
 
   const handleAddSubject = async () => {
     if (!newSubject) {
@@ -611,9 +1516,24 @@ const SubjectScreen = ({ route, navigation }) => {
       return;
     }
     try {
-      await addDoc(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams', exam.name, 'papers', paper.name, 'subjects'), { name: newSubject });
+      const subjectsRef = collection(
+        firestore,
+        'countries', country.name,
+        'states', state.name,
+        'standards', standard.name,
+        'exams', exam.name,
+        'papers', paper.name,
+        'subjects'
+      );
+      const q = query(subjectsRef, orderBy('subjectNumber', 'asc'));
+      const snapshot = await getDocs(q);
+      const nextSubjectNumber = snapshot.size + 1;
+      await addDoc(subjectsRef, { 
+        name: newSubject, 
+        subjectNumber: nextSubjectNumber 
+      });
       setNewSubject('');
-      Alert.alert('Success', 'Subject added successfully!');
+      Alert.alert('Success', `Subject added successfully! (Subject number: ${nextSubjectNumber})`);
     } catch (error) {
       console.error("Error adding subject: ", error);
       Alert.alert('Error', 'There was an issue adding the subject.');
@@ -621,225 +1541,389 @@ const SubjectScreen = ({ route, navigation }) => {
   };
 
   const handleSubjectPress = (subject) => {
-    // Navigate to either the Create Room or Join Room screen
     navigation.navigate('Chapter', { country, state, standard, exam, paper, subject });
   };
 
   return (
-    <SafeAreaView>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      <Text>Select a Subject for {paper.name}</Text>
-      {subjects.map((subject, index) => (
-        <Button key={index} title={subject.name} onPress={() => handleSubjectPress(subject)} />
-      ))}
-      <TextInput
-        value={newSubject}
-        placeholder="Add new subject"
-        onChangeText={setNewSubject}
+    <ImageBackground
+      source={require('./ui/photos/s5-removebg-preview.png')} // Replace with your Ludo-themed background image path
+      style={{ flex: 1, width:screenWidth ,height: screenHeight+90,marginTop:-20}}
+      
+    >
+      {/* Dark overlay for contrast */}
+      <View style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        
+      }} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+          <GradientText
+            text={`${paper.name} - Subjects`}
+            style={{ fontSize: 32, fontWeight: '700', textAlign: 'center', marginBottom: 30, color: '#fff' }}
+          />
+          {/* Search Bar */}
+          <Image 
+        source={require('./ui/photos/s1-removebg-preview.png')}
+        style={{ width: screenWidth, height: 110 , marginLeft:-20,marginTop:50,marginBottom: 20}}
+        resizeMode="cover"
       />
-      <Button title="Add Subject" onPress={handleAddSubject} />
-    </SafeAreaView>
+          {/* Ludo-Inspired Subject Buttons */}
+          {filteredSubjects.map((subject) => (
+            <TouchableOpacity
+              key={subject.id}
+              onPress={() => handleSubjectPress(subject)}
+              activeOpacity={0.8}
+              style={{
+
+              }}
+            >
+              <ImageBackground
+                source={require('./ui/photos/s4-removebg-preview.png')} // Replace with your pattern image
+                style={{
+                  padding: 50,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                
+              >
+
+                <Text style={{
+                  fontSize: 20,
+                  fontWeight: '700',
+                  color: '#fff',
+                  textShadowColor: '#000',
+                  textShadowOffset: { width: 1, height: 1 },
+                  textShadowRadius: 3,
+                  textAlign: 'center',
+                }}>
+                  {subject.subjectNumber}. {subject.name}
+                </Text>
+              </ImageBackground>
+            </TouchableOpacity>
+          ))}
+          <Image 
+        source={require('./ui/photos/s3-removebg-preview1.png')}
+        style={{ width: screenWidth, height: 110 , marginLeft:-20,marginTop:50,marginBottom: 20}}
+        resizeMode="cover"
+      />
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 };
 
+const { width, height } = Dimensions.get('window');
 
 const ChapterScreen = ({ route, navigation }) => {
-    const { country, state, standard, exam, paper, subject } = route.params;
-    const [chapters, setChapters] = useState([]);
-    const [newChapter, setNewChapter] = useState('');
-  
-    useEffect(() => {
-      const fetchChapters = async () => {
-        try {
-          const querySnapshot = await getDocs(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams', exam.name, 'papers', paper.name, 'subjects', subject.name, 'chapters'));
-          const chaptersList = querySnapshot.docs.map(doc => doc.data());
-          setChapters(chaptersList);
-        } catch (error) {
-          console.error("Error fetching chapters: ", error);
-        }
-      };
-      fetchChapters();
-    }, [country, state, standard, exam, paper, subject]);
-  
-    const handleAddChapter = async () => {
-      if (!newChapter) {
-        Alert.alert('Error', 'Please enter a chapter name.');
-        return;
-      }
-      try {
-        await addDoc(collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name, 'exams', exam.name, 'papers', paper.name, 'subjects', subject.name, 'chapters'), { name: newChapter });
-        setNewChapter('');
-        Alert.alert('Success', 'Chapter added successfully!');
-      } catch (error) {
-        console.error("Error adding chapter: ", error);
-        Alert.alert('Error', 'There was an issue adding the chapter.');
-      }
-    };
-  
-    const handleChapterPress = (chapter) => {
-      // Navigate to either the Create Room or Join Room screen
-      navigation.navigate('Create or Join Room', { country, state, standard, exam, paper, subject, chapter });
-    };
-  
-    return (
-        <SafeAreaView>
-            <Text>Select a Subject for {paper.name}</Text>
-            {chapters.map((chapter, index) => (
-                <Button 
-                    key={index} 
-                    title={chapter.name || 'Chapter not available'} // Fallback text
-                    onPress={() => handleChapterPress(chapter)} 
-                />
-            ))}
-            <TextInput
-                value={newChapter}
-                placeholder="Add new chapter"
-                onChangeText={setNewChapter}
-            />
-            <Button title="Add Chapter" onPress={handleAddChapter} />
-        </SafeAreaView>
+  const { country, state, standard, exam, paper, subject } = route.params;
+  const [chapters, setChapters] = useState([]);
+  const [newChapter, setNewChapter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredChapters, setFilteredChapters] = useState([]);
+
+  // Realtime Firestore listener for chapters.
+  useEffect(() => {
+    const chaptersRef = collection(
+      firestore,
+      'countries', country.name,
+      'states', state.name,
+      'standards', standard.name,
+      'exams', exam.name,
+      'papers', paper.name,
+      'subjects', subject.name,
+      'chapters'
     );
-  };
-
-
-
-
-const CreateOrJoinRoomScreen = ({ route, navigation }) => {
-  const { country,state,standard, exam, paper, subject, chapter } = route.params;
-  const [roomID, setRoomID] = useState('');
-  const [roomCreated, setRoomCreated] = useState(false);
-  const [roomNotFound, setRoomNotFound] = useState(false);
-  const [playerName, setPlayerName] = useState('');
-
-  // Create Room
-  const createRoom = async () => {
-    if (!playerName.trim()) {
-      Alert.alert('Error', 'Please enter your name');
-      return;
-    }
-
-    const newRoomID = generateRoomID();
-    const roomRef = doc(firestore, 'rooms', newRoomID);
-
-    
-    try {
-      const mcqsRef = collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name,
-        'exams', exam.name, 'papers', paper.name, 'subjects', subject.name, 'chapters', chapter.name, 'mcqs');
-      const mcqsSnapshot = await getDocs(mcqsRef);
-      const mcqsList = mcqsSnapshot.docs.map(doc => ({
+    const q = query(chaptersRef, orderBy('chapterNumber', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const chaptersList = snapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        chapterNumber: doc.data().chapterNumber,
+        ...doc.data(),
       }));
+      setChapters(chaptersList);
+      setFilteredChapters(chaptersList);
+    }, (error) => {
+      console.error("Error fetching chapters: ", error);
+      Alert.alert("Error", "Failed to load chapters.");
+    });
+    return () => unsubscribe();
+  }, [country, state, standard, exam, paper, subject]);
 
-      await setDoc(roomRef, {
-        players: [{ id: 'player1', name: playerName }],
-        playerLimit: 1,
-        currentIndex: 0,
-        currentTurn: 'player1',
-        mcqs: mcqsList, // Store MCQs in the room
-        scores: {},
-        gameStarted: true,
-        lastAnsweredBy: null
-      });
-
-      setRoomID(newRoomID);
-      setRoomCreated(true);
-
-      // Pass mcqsRef to Ludo
-      navigation.navigate('Ludo', { mcqsRef }); // Pass mcqsRef to Ludo
-
-    } catch (error) {
-      console.error("Error creating room: ", error);
-      Alert.alert('Error', 'There was an issue creating the room.');
+  // Filter chapters as search query changes.
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredChapters(chapters);
+    } else {
+      const lowerQuery = searchQuery.toLowerCase();
+      setFilteredChapters(
+        chapters.filter(item => item.name.toLowerCase().includes(lowerQuery))
+      );
     }
-  };
+  }, [searchQuery, chapters]);
 
-  // Generate Room ID
-  const generateRoomID = () => {
-    return Math.random().toString(36).substr(2, 6); // Generates a random 6-character room ID
-  };
-
-  // Join Room
-  const joinRoom = async () => {
-    if (!playerName.trim()) {
-      Alert.alert('Error', 'Please enter your name');
+  const handleAddChapter = async () => {
+    if (!newChapter) {
+      Alert.alert('Error', 'Please enter a chapter name.');
       return;
     }
-
-    const roomRef = doc(firestore, 'rooms', roomID);
-    const roomSnap = await getDoc(roomRef);
-
-    if (roomSnap.exists()) {
-      const roomData = roomSnap.data();
-      const playerCount = roomData.players.length;
-      const newPlayerId = `player${playerCount + 1}`;
-      
-      const newPlayer = { id: newPlayerId, name: playerName };
-      await updateDoc(roomRef, {
-        players: arrayUnion(newPlayer),
-      });
-
-      navigation.navigate('MCQ', { 
-        country, 
-        state, 
-        standard,
-        exam, 
-        paper, 
-        subject, 
-        roomID,
-        playerName: playerName
-      });
-    } else {
-      setRoomNotFound(true);
+    try {
+      const chaptersRef = collection(
+        firestore,
+        'countries', country.name,
+        'states', state.name,
+        'standards', standard.name,
+        'exams', exam.name,
+        'papers', paper.name,
+        'subjects', subject.name,
+        'chapters'
+      );
+      const q = query(chaptersRef, orderBy('chapterNumber', 'asc'));
+      const snapshot = await getDocs(q);
+      const nextChapterNumber = snapshot.size + 1;
+      await addDoc(chaptersRef, { name: newChapter, chapterNumber: nextChapterNumber });
+      setNewChapter('');
+      Alert.alert('Success', 'Chapter added successfully!');
+    } catch (error) {
+      console.error("Error adding chapter: ", error);
+      Alert.alert('Error', 'There was an issue adding the chapter.');
     }
+  };
+
+  const handleChapterPress = (chapter) => {
+    navigation.navigate('Create or Join Room', { country, state, standard, exam, paper, subject, chapter });
   };
 
   return (
-    <SafeAreaView style={{ padding: 20 }}>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-        <Text>Select a Subject for </Text>
-
-      <TextInput
-        placeholder="Enter your name"
-        value={playerName}
-        onChangeText={setPlayerName}
-        style={{ marginBottom: 20, padding: 10, borderWidth: 1 }}
+    <ImageBackground
+      source={require('./ui/photos/r1-removebg-preview.png')} // Ludo-themed background image
+      style={{ flex: 1, width: screenWidth, height: screenHeight + 90, marginTop: -20 }}
+      resizeMode="cover"
+    >
+      {/* Dark overlay for contrast */}
+      <View style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        
+      }} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+          <GradientText
+            text={`${subject.name} - Chapters`}
+            style={{
+              fontSize: 32,
+              fontWeight: '700',
+              textAlign: 'center',
+              marginBottom: 30,
+              color: '#fff',
+            }}
+          />
+          {/* Search Bar */}
+          <Image 
+        source={require('./ui/photos/p2-removebg-preview.png')}
+        style={{ width: screenWidth, height: 110 , marginLeft:-20,marginTop:50,marginBottom: 20}}
+        resizeMode="cover"
       />
-
-      <TouchableOpacity
-        onPress={createRoom}
-        style={{
-          padding: 15,
-          backgroundColor: '#007AFF',
-          borderRadius: 5,
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: 'white' }}>
-          Start Single Player
-        </Text>
-      </TouchableOpacity>
-      
-      {roomCreated && <Text>Room ID: {roomID}</Text>}
-      {roomNotFound && <Text>Room not found. Please check the ID.</Text>}
-    </SafeAreaView>
+          {/* Chapter Buttons */}
+          {filteredChapters.map((chapter) => (
+            <TouchableOpacity
+              key={chapter.id}
+              onPress={() => handleChapterPress(chapter)}
+              activeOpacity={0.8}
+              style={{ marginBottom: 15 }}
+            >
+              <ImageBackground
+                source={require('./ui/photos/p3-removebg-preview.png')} // Pattern image for chapter buttons
+                style={{
+                  padding: 50,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                resizeMode="cover"
+              >
+                <Text style={{
+                  fontSize: 20,
+                  fontWeight: '700',
+                  color: '#fff',
+                  textShadowColor: '#000',
+                  textShadowOffset: { width: 1, height: 1 },
+                  textShadowRadius: 3,
+                  textAlign: 'center',
+                }}>
+                  {chapter.chapterNumber}. {chapter.name}
+                </Text>
+              </ImageBackground>
+            </TouchableOpacity>
+          ))}
+         <Image 
+        source={require('./ui/photos/c1-removebg-preview.png')}
+        style={{ width: screenWidth, height: 110 , marginLeft:-20,marginTop:50,marginBottom: 20}}
+        resizeMode="cover"
+      />
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 };
+
+
+
+
+
+
+  const CreateOrJoinRoomScreen = ({ route, navigation }) => {
+    const { country, state, standard, exam, paper, subject, chapter } = route.params;
+    const [roomID, setRoomID] = useState('');
+    const [roomCreated, setRoomCreated] = useState(false);
+    const [roomNotFound, setRoomNotFound] = useState(false);
+    const [playerName, setPlayerName] = useState('');
+  
+    const createRoom = async () => {
+      if (!playerName.trim()) {
+        Alert.alert('Error', 'Please enter your name');
+        return;
+      }
+  
+      const newRoomID = generateRoomID();
+      const roomRef = doc(firestore, 'rooms', newRoomID);
+  
+      try {
+        const mcqsRef = collection(firestore, 'countries', country.name, 'states', state.name, 'standards', standard.name,
+          'exams', exam.name, 'papers', paper.name, 'subjects', subject.name, 'chapters', chapter.name, 'mcqs');
+        const mcqsSnapshot = await getDocs(mcqsRef);
+        const mcqsList = mcqsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+  
+        await setDoc(roomRef, {
+          players: [{ id: 'player1', name: playerName }],
+          playerLimit: 1,
+          currentIndex: 0,
+          currentTurn: 'player1',
+          mcqs: mcqsList,
+          scores: {},
+          gameStarted: true,
+          lastAnsweredBy: null
+        });
+  
+        setRoomID(newRoomID);
+        setRoomCreated(true);
+  
+        navigation.navigate('Ludo', { mcqsRef });
+      } catch (error) {
+        console.error("Error creating room: ", error);
+        Alert.alert('Error', 'There was an issue creating the room.');
+      }
+    };
+  
+    const generateRoomID = () => {
+      return Math.random().toString(36).substr(2, 6);
+    };
+  
+    const joinRoom = async () => {
+      if (!playerName.trim()) {
+        Alert.alert('Error', 'Please enter your name');
+        return;
+      }
+  
+      const roomRef = doc(firestore, 'rooms', roomID);
+      const roomSnap = await getDoc(roomRef);
+  
+      if (roomSnap.exists()) {
+        const roomData = roomSnap.data();
+        const playerCount = roomData.players.length;
+        const newPlayerId = `player${playerCount + 1}`;
+  
+        const newPlayer = { id: newPlayerId, name: playerName };
+        await updateDoc(roomRef, {
+          players: arrayUnion(newPlayer),
+        });
+  
+        navigation.navigate('MCQ', { 
+          country, 
+          state, 
+          standard,
+          exam, 
+          paper, 
+          subject, 
+          roomID,
+          playerName
+        });
+      } else {
+        setRoomNotFound(true);
+      }
+    };
+  
+    return (
+      <ImageBackground
+      source={require('./assets/AAA style background for Ludo game.png')} // Replace with your image path
+      style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+      resizeMode="cover"
+    >
+      <SafeAreaView style={{ flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#00E5FF', fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, textTransform: 'uppercase', letterSpacing: 2 }}>
+          Select your language
+        </Text>
+  
+        <TextInput
+          placeholder="Enter your name"
+          placeholderTextColor="#8B949E"
+          value={playerName}
+          onChangeText={setPlayerName}
+          style={{ 
+            backgroundColor: '#1A1F2E', 
+            color: '#C9D1D9', 
+            padding: 18, 
+            borderRadius: 20, 
+            borderWidth: 3, 
+            borderColor: '#00E5FF', 
+            marginBottom: 20,
+            fontSize: 20,
+            width: '90%',
+            textAlign: 'center',
+            shadowColor: '#00E5FF',
+            shadowOffset: { width: 0, height: 5 },
+            shadowOpacity: 1,
+            shadowRadius: 15,
+            elevation: 15,
+            textTransform: 'uppercase',
+            letterSpacing: 1.8,
+            fontWeight: 'bold'
+          }}
+        />
+  
+        <TouchableOpacity
+          onPress={createRoom}
+          style={{
+            paddingVertical: 18,
+            paddingHorizontal: 30,
+            backgroundColor: '#00E5FF',
+            borderRadius: 20,
+            alignItems: 'center',
+            width: '90%',
+            shadowColor: '#00E5FF',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 1,
+            shadowRadius: 20,
+            elevation: 20,
+            borderWidth: 3,
+            borderColor: '#FFFFFF',
+            transform: [{ scale: 1 }],
+            transition: 'transform 0.1s ease-in-out'
+          }}
+        >
+          <Text style={{ color: '#0A0F1E', fontSize: 24, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 2.5 }}>
+            Start Single Player
+          </Text>
+        </TouchableOpacity>
+  
+        {roomCreated && <Text style={{ color: '#00E5FF', textAlign: 'center', marginTop: 15, fontSize: 18, fontWeight: 'bold' }}>Room ID: {roomID}</Text>}
+        {roomNotFound && <Text style={{ color: 'red', textAlign: 'center', marginTop: 15, fontSize: 18, fontWeight: 'bold' }}>Room not found. Please check the ID.</Text>}
+      </SafeAreaView>
+      </ImageBackground>
+    );
+  };
  
 // MCQ Screen
 const MCQScreen = ({ route, navigation }) => {
@@ -1277,7 +2361,10 @@ const Ludo=({ route }) => {
     };
 
     // Add this function to check if all tokens of a color are in winning position
-
+    const checkAllTokensComplete = (color, tokens) => {
+        const colorTokens = tokens.filter(t => t.color === color);
+        return colorTokens.every(token => isTokenInWinPosition(token));
+    };
 
     // Helper function to check if a player has completed all tokens
     const isPlayerCompleted = (color) => {
@@ -1315,72 +2402,64 @@ const Ludo=({ route }) => {
    
     const handleDiceRoll = async (rolledValue) => {
       if (!turnState.isDiceRollAllowed || gameEnded) {
-        console.log('Dice roll not allowed at this time');
-        return;
+          console.log('Dice roll not allowed at this time');
+          return;
       }
-    
+  
       if (turnState.isComputerTurn) {
-        console.log('Cannot manually roll during computer turn');
-        return;
+          console.log('Cannot manually roll during computer turn');
+          return;
       }
-    
+  
       // Play the dice roll sound
       try {
-        const { sound } = await Audio.Sound.createAsync(
-          require('./assets/dice-95077.mp3')  // Ensure this file exists inside assets folder
-        );
-        await sound.playAsync();
+          const { sound } = await Audio.Sound.createAsync(
+              require('./assets/dice-95077.mp3')  // Ensure this file exists inside assets folder
+          );
+          await sound.playAsync();
       } catch (error) {
-        console.log('Error playing sound:', error);
+          console.log('Error playing sound:', error);
       }
-    
+  
       console.log(`Player rolled: ${rolledValue}`);
       setDiceValue(rolledValue);
       setIsDiceEnabled(false);
-    
+  
       // Update turn state
       setTurnState(prev => ({
-        ...prev,
-        lastRoll: rolledValue
+          ...prev,
+          lastRoll: rolledValue
       }));
-    
+  
       // Calculate possible moves after roll
       const currentTokens = tokens.filter(
-        token => token.color === activeColors[currentPlayer]
+          token => token.color === activeColors[currentPlayer]
       );
-    
+  
       let possibleMoves = [];
       currentTokens.forEach(token => {
-        const moves = calculatePossibleMoves(token.position, rolledValue, token);
-        if (moves.length > 0) {
-          possibleMoves = [...possibleMoves, ...moves];
-        }
-      });
-    
-      setPossibleMoves(possibleMoves);
-    
-      // If no moves available, handle turn transition
-      if (possibleMoves.length === 0) {
-        setTimeout(() => {
-          setDiceValue(null);
-          // Extra chance rule: if a token was captured and it belonged to the next player,
-          // grant the current player another roll.
-          if (capturedToken) {
-            console.log('Extra chance granted because captured token belonged to next player');
-            setCapturedToken(false); // reset flag
-            setIsDiceEnabled(true);  // re-enable dice for an extra roll
-          } else if (rolledValue !== 6) {
-            const nextPlayer = getNextActivePlayer(currentPlayer);
-            setCurrentPlayer(nextPlayer);
-            setIsDiceEnabled(true);
-          } else {
-            // Rolled a 6 but no moves (and no capture) so allow another roll
-            setIsDiceEnabled(true);
+          const moves = calculatePossibleMoves(token.position, rolledValue, token);
+          if (moves.length > 0) {
+              possibleMoves = [...possibleMoves, ...moves];
           }
-        }, 1000);
+      });
+  
+      setPossibleMoves(possibleMoves);
+  
+      // If no moves available, switch to next player
+      if (possibleMoves.length === 0) {
+          setTimeout(() => {
+              setDiceValue(null);
+              if (rolledValue !== 6) {
+                  const nextPlayer = getNextActivePlayer(currentPlayer);
+                  setCurrentPlayer(nextPlayer);
+                  setIsDiceEnabled(true);
+              } else {
+                  setIsDiceEnabled(true);
+              }
+          }, 1000);
       }
-    };
-    
+  };
 
   const moveToken = (targetPosition) => {
     if (!selectedToken || gameEnded) return;
@@ -1449,7 +2528,6 @@ if (tokensAtTarget.length > 0 && !isSafeSpot(targetPosition[0], targetPosition[1
             setTimeout(() => {
                 setDiceValue(null);
                 setIsDiceEnabled(true);
-                setLastCapture(targetToken.color);
             }, 800);
         } else if (diceValue === 6) {
             // Player gets another turn when rolling a 6
@@ -1607,73 +2685,50 @@ if (tokensAtTarget.length > 0 && !isSafeSpot(targetPosition[0], targetPosition[1
         }
 
         setTokens(prevTokens => {
-          let capturedTokenColor = null; // Local variable to track captured token's color
-          const newTokens = prevTokens.map(t => {
-            // Move current token
-            if (
-              t.color === currentColor &&
-              t.position[0] === position[0] &&
-              t.position[1] === position[1]
-            ) {
-              return {
-                ...t,
-                position: targetPosition,
-                isHome: false,
-              };
-            }
-            // Handle opponent tokens at target position (only if not a safe spot)
-            else if (
-              !isTargetSafeSpot &&
-              t.position[0] === targetPosition[0] &&
-              t.position[1] === targetPosition[1] &&
-              t.color !== currentColor
-            ) {
-              // Only capture if not protected
-              const isProtected = prevTokens.filter(pt => 
-                pt.position[0] === t.position[0] &&
-                pt.position[1] === t.position[1] &&
-                pt.color === t.color
-              ).length >= 2;
-        
-              if (!isProtected) {
-                // Record the captured token's color
-                capturedTokenColor = t.color;
-                const homePosition = getHomePosition(t.color, t.id);
-                console.log(`${currentColor} captured ${t.color} token`);
-                return {
-                  ...t,
-                  position: homePosition,
-                  isHome: true,
-                  isCaptured: true,
-                };
-              } else {
-                Alert.alert(
-                  "Protected pieces",
-                  "Sorry! You can't capture protected pieces.",
-                  [{ text: "OK" }]
-                );
-              }
-            }
-            return t;
-          });
-        
-          // After processing, if a token was captured,
-          // check if its color matches the next player's color.
-          if (capturedTokenColor) {
-            const nextPlayerIndex = getNextActivePlayer(currentPlayer);
-            const nextPlayerColor = activeColors[nextPlayerIndex];
-            if (capturedTokenColor === nextPlayerColor) {
-              console.log("Captured token belongs to next player. Granting extra chance to roll.");
-              // Grant extra chance: For example, re-enable dice (without changing the current player)
-              // You can update state or call a function as needed.
-              setDiceValue(null);
-              setIsDiceEnabled(true);
-            }
-          }
-        
-          return newTokens;
+            const newTokens = prevTokens.map(t => {
+                // Move current token
+                if (t.color === currentColor && 
+                    t.position[0] === position[0] && 
+                    t.position[1] === position[1]) {
+                    return {
+                        ...t,
+                        position: targetPosition,
+                        isHome: false
+                    };
+                }
+                // Handle opponent tokens at target position (only if not a safe spot)
+                else if (!isTargetSafeSpot && 
+                         t.position[0] === targetPosition[0] && 
+                         t.position[1] === targetPosition[1] && 
+                         t.color !== currentColor) {
+                    // Only capture if not protected
+                    const isProtected = prevTokens.filter(pt => 
+                        pt.position[0] === t.position[0] && 
+                        pt.position[1] === t.position[1] && 
+                        pt.color === t.color
+                    ).length >= 2;
+
+                    if (!isProtected) {
+                        const homePosition = getHomePosition(t.color, t.id);
+                        return {
+                            ...t,
+                            position: homePosition,
+                            isHome: true
+                        };
+                    } else {
+                        // This case shouldn't be reached due to earlier check,
+                        // but keeping it for safety
+                        Alert.alert(
+                            "Protected pieces",
+                            "Sorry! You can't capture protected pieces.",
+                            [{ text: "OK" }]
+                        );
+                    }
+                }
+                return t;
+            });
+            return newTokens;
         });
-        
 
         setPossibleMoves([]);
         setSelectedToken(null);
@@ -2695,20 +3750,31 @@ const handleComputerMove = (tokenPosition, targetPosition, rolledValue) => {
 
 
     useEffect(() => {
-      if (!lastCapture) return;
-      
+      if (!lastCapture) return; // No capture occurred
+    
+      // Determine next player's index and color
       const nextPlayerIndex = getNextActivePlayer(currentPlayer);
       const nextPlayerColor = activeColors[nextPlayerIndex];
-      
+    
+      // Debug logging to verify values
+      console.log("lastCapture:", lastCapture, "nextPlayerColor:", nextPlayerColor);
+    
+      // If the captured token belongs to the next player, grant extra chance
       if (lastCapture === nextPlayerColor) {
-        console.log("Captured token belongs to next player. Granting extra chance.");
+        console.log("Extra chance granted: Captured token belonged to the next player.");
         showFlashMessage("You captured the next player's token! Roll again.");
-        // Grant extra turn by re-enabling dice and keeping current player.
-        setDiceValue(null);
-        setIsDiceEnabled(true);
+        setTimeout(() => {
+          setDiceValue(null);
+          setIsDiceEnabled(true);
+        }, 800);
+      } else {
+        console.log("No extra chance: Captured token does not belong to next player.");
       }
-      
-      setLastCapture(null);
+    
+      // Delay resetting lastCapture to ensure the effect runs properly
+      setTimeout(() => {
+        setLastCapture(null);
+      }, 100);
     }, [lastCapture, currentPlayer, activeColors]);
     
 
@@ -2720,7 +3786,7 @@ const handleComputerMove = (tokenPosition, targetPosition, rolledValue) => {
 
     
     return (
-        <ImageBackground source={require('./assets/cool background design for Ludo game app (1).png')} style={styles.background}>
+        <ImageBackground source={require('./assets/cool_background_d.png')} style={styles.background}>
         <View style={styles.container}>
             {showPlayerSelection ? (
                 gameMode ? (
@@ -2745,15 +3811,24 @@ const handleComputerMove = (tokenPosition, targetPosition, rolledValue) => {
                     </Text>
                     
 
-                    <Board 
-                        style={styles.board}
-                        currentPlayer={currentPlayer}
-                        diceValue={diceValue}
-                        tokens={tokens}
-                        onMoveToken={moveToken}
-                        possibleMoves={possibleMoves}
-                        onTokenSelect={handleTokenSelect}
-                    />
+                    <View style={styles.container1}>
+      <ImageBackground 
+        source={require('./assets/ludoBoard2.png')}
+        style={styles.background1}
+      >
+        <View style={styles.overlay1}>
+          <Board 
+            style={styles.board}
+            currentPlayer={currentPlayer}
+            diceValue={diceValue}
+            tokens={tokens}
+            onMoveToken={moveToken}
+            possibleMoves={possibleMoves}
+            onTokenSelect={handleTokenSelect}
+          />
+        </View>
+      </ImageBackground>
+    </View>
 
                     
                     {/* Show dice if game is not ended */}
@@ -2780,61 +3855,49 @@ const handleComputerMove = (tokenPosition, targetPosition, rolledValue) => {
   {formatTime(elapsedTime)}
   </Animated.Text> 
   </View>
-  {currentMCQ && currentTurn === playerRole && diceValue === null && TimerDisplay ? (
+                    {currentMCQ && currentTurn === playerRole && diceValue === null && TimerDisplay? (
   <View style={styles.futuristicContainer}>
     
     {/* Render question: show image if available, else text */}
-    {currentMCQ.questionText ? (
     <Text style={styles.futuristicQuestionText}>
-      {currentMCQ.questionText.split("\n").map((line, index) => (
-        <Text key={index}>
-          {line}
-          {"\n"}
-        </Text>
-      ))}
-    </Text>
-  ) : null}
-  {currentMCQ.questionImage ? (
+    {currentMCQ.questionText}
+  </Text>
+    {currentMCQ.questionImage && (
     <Image
       source={{ uri: currentMCQ.questionImage }}
       style={styles.futuristicQuestionImage}
       resizeMode="cover"
     />
-  ) : null}
+  )}
+  
   
     {/* Render options */}
     {currentMCQ.options.map((option, index) => (
-  <TouchableOpacity
-    key={index}
-    style={styles.futuristicAnswerOption}
-    onPress={() => handleMCQAnswerSelection((index + 1).toString())}
-  >
-    {option.text ? (
-      <Text style={styles.futuristicAnswerText}>
-        {option.text.split("\n").map((line, i) => (
-          <Text key={i}>
-            {line}
-            {"\n"}
+      <TouchableOpacity
+        key={index}
+        style={styles.futuristicAnswerOption}
+        onPress={() => handleMCQAnswerSelection((index + 1).toString())}
+      >
+        <Text style={styles.futuristicAnswerText}>
+            {option.text}
           </Text>
-        ))}
-      </Text>
-    ) : null}
-    {option.image ? (
-      <Image
-        source={{ uri: option.image }}
-        style={styles.futuristicOptionImage}
-        resizeMode="cover"
-      />
-    ) : null}
-  </TouchableOpacity>
-))}
+        {option.image && (
+          <Image
+            source={{ uri: option.image }}
+            style={styles.futuristicOptionImage}
+            resizeMode="cover"
+          />
+        )}
+          
+        
+      </TouchableOpacity>
+    ))}
   </View>
-) : (
+) : ( 
   <Text style={styles.futuristicWaitingText}>
     Waiting for your turn...
   </Text>
 )}
-
 <StatusBar style="auto" />
                     
                     {/* Modified Token Selection Modal */}
@@ -2930,11 +3993,14 @@ const handleComputerMove = (tokenPosition, targetPosition, rolledValue) => {
 // App Component with Navigation
 const App = () => (
   <NavigationContainer>
-    <Stack.Navigator initialRouteName="CountryState">
+    <Stack.Navigator initialRouteName="Signup">
+    <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="CountryState" component={CountryStateScreen} options={{ headerShown: false }}/>
       {/* <Stack.Screen name="Country" component={CountryScreen} options={{ headerShown: false }}/>
       <Stack.Screen name="State" component={StateScreen} options={{ headerShown: false }}/> */}
       <Stack.Screen name="Exam" component={ExamScreen} options={{ headerShown: false }}/>
+      <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Paper" component={PaperScreen} options={{ headerShown: false }}/>
       <Stack.Screen name="Subject" component={SubjectScreen} options={{ headerShown: false }}/>
       <Stack.Screen name="Chapter" component={ChapterScreen} options={{ headerShown: false }}/>
@@ -2947,7 +4013,11 @@ const App = () => (
 );
 
 export default App;
+
+
 const screenWidth = Dimensions.get('window').width;
+const screenHeight = Dimensions.get('window').height;
+
 const styles = StyleSheet.create({
   container: {
       flex: 1,
@@ -2974,23 +4044,23 @@ playerText: {
   textShadowOffset: { width: 0, height: 4 },
   textShadowRadius: 8,
 },
-  board: {
-      width: 360,
-      height: 360,
-      backgroundColor: '#ffffff',
-      borderRadius: 30,
-      shadowColor: "#6366f1",
-      shadowOffset: {
-          width: 0,
-          height: 10,
-      },
-      shadowOpacity: 0.25,
-      shadowRadius: 15,
-      elevation: 20,
-      borderWidth: 3,
-      borderColor: 'rgba(99, 102, 241, 0.3)',
-      padding: 2,  // Added padding for inner glow effect
-  },
+  // board: {
+  //     width: 380,
+  //     height: 360,
+  //     backgroundColor: '#ffffff',
+  //     borderRadius:0,
+  //     shadowColor: "#6366f1",
+  //     shadowOffset: {
+  //         width: 0,
+  //         height: 10,
+  //     },
+  //     shadowOpacity: 0.25,
+  //     shadowRadius: 15,
+  //     elevation: 20,
+  //     borderWidth: 3,
+  //     //borderColor: 'rgba(99, 102, 241, 0.3)',
+  //     //padding: 2,  // Added padding for inner glow effect
+  // },
   row: {
       flexDirection: 'row',
   },
@@ -3755,23 +4825,76 @@ background: {
     flex: 1,
     resizeMode: 'cover', // or 'stretch'
   },
-  board: {
-    margin: 20,
-    padding: 20,
-    backgroundColor: '#0f2027', // dark base color for a futuristic vibe
-    borderRadius: 15,
-    borderWidth: 2,
-    borderColor: '#00ffff', // neon cyan border
-    shadowColor: '#00ffff',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 10, // for Android shadow
-  },
+  // board: {
+  //   margin: 20,
+  //   padding: 20,
+  //   //backgroundColor: '#0f2027', // dark base color for a futuristic vibe
+  //   borderRadius: 15,
+  //   borderWidth: 2,
+  //   borderColor: '#00ffff', // neon cyan border
+  //   shadowColor: '#00ffff',
+  //   shadowOffset: { width: 0, height: 4 },
+  //   shadowOpacity: 0.8,
+  //   shadowRadius: 10,
+  //   elevation: 10, // for Android shadow
+  //   marginTop:15,
+  // },
   diceTimerContainer: {
     flexDirection: 'column', // this is default, but makes it explicit
     alignItems: 'center',    // center components horizontally
     marginTop: 20,           // adjust spacing as needed
   },
+  redHome: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 6,
+    borderColor: '#b43433',
+  },
+  greenHome: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 6,
+    borderColor: '#33ab63',
+  },
+  yellowHome: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 6,
+    borderColor: '#e0c550',
+  },
+  blueHome: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 6,
+    borderColor: '#4258c8',
+  },
+  centerCell: {
+    backgroundColor: 'transparent',
+  },
+  background1: {
+    width: 360,
+    height:360,  // 95% of screen width
+    aspectRatio: 1, // Ensures it remains a perfect square
+    justifyContent: 'center',
+    alignItems: 'center',
+    resizeMode: 'contain',
+    marginTop:-40,
+  },
+  overlay1: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  container1: {
+    flex: 1,
+    width:380,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
 
 });
+
